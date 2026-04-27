@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Branco ao Cinza | Transição Ascendente</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background-color: #000000;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Montserrat', 'Helvetica Neue', 'Segoe UI', 'Gill Sans MT', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Canvas de fundo: quadrados que mudam de branco para cinza */
+        #canvas-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 0;
+            pointer-events: none;
+            background-color: #000000;
+        }
+
+        /* Container principal acima do canvas */
+        .hero {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        /* Container vertical com as listras e palavra */
+        .container-vertical {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        /* Wrapper para que as listras acompanhem exatamente a largura do texto */
+        .palavra-wrapper {
+            display: inline-block;
+            position: relative;
+        }
+
+        .linha-superior, .linha-inferior {
+            display: block;
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 0 4px rgba(255,255,255,0.3);
+            border-radius: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .linha-superior {
+            margin-bottom: 0.7rem;
+        }
+
+        .linha-inferior {
+            margin-top: 0.7rem;
+        }
+
+        /* Palavra: letras bem próximas, grossas e elegantes */
+        .palavra-principal {
+            font-size: 2.4rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #ffffff;
+            background: transparent;
+            text-shadow: 0 0 2px rgba(255,255,255,0.15), 0 1px 8px rgba(0,0,0,0.3);
+            font-family: 'Montserrat', 'Playfair Display', 'Times New Roman', serif;
+            white-space: nowrap;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Responsividade */
+        @media (max-width: 850px) {
+            .palavra-principal {
+                font-size: 2rem;
+                letter-spacing: 0.015em;
+            }
+            .linha-superior {
+                margin-bottom: 0.6rem;
+            }
+            .linha-inferior {
+                margin-top: 0.6rem;
+            }
+        }
+
+        @media (max-width: 650px) {
+            .palavra-principal {
+                font-size: 1.5rem;
+                letter-spacing: 0.01em;
+            }
+            .linha-superior, .linha-inferior {
+                height: 1.8px;
+            }
+            .linha-superior {
+                margin-bottom: 0.5rem;
+            }
+            .linha-inferior {
+                margin-top: 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .palavra-principal {
+                font-size: 1.15rem;
+                letter-spacing: 0.005em;
+            }
+            .linha-superior, .linha-inferior {
+                height: 1.5px;
+            }
+            .linha-superior {
+                margin-bottom: 0.45rem;
+            }
+            .linha-inferior {
+                margin-top: 0.45rem;
+            }
+        }
+
+        @media (min-width: 1400px) {
+            .palavra-principal {
+                font-size: 2.7rem;
+                letter-spacing: 0.025em;
+            }
+            .linha-superior {
+                margin-bottom: 0.85rem;
+            }
+            .linha-inferior {
+                margin-top: 0.85rem;
+            }
+        }
+
+        .texto-centralizado {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+        
+        .linha-superior, .linha-inferior {
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas-bg"></canvas>
+
+    <div class="hero">
+        <div class="texto-centralizado">
+            <div class="container-vertical">
+                <div class="palavra-wrapper">
+                    <div class="linha-superior"></div>
+                    <div class="palavra-principal">BACKGROUND ANIMADO</div>
+                    <div class="linha-inferior"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // Canvas para os quadrados que sobem: BRANCOS lá embaixo -> escurecem até CINZA -> somem
+            const canvas = document.getElementById('canvas-bg');
+            let ctx = canvas.getContext('2d');
+            
+            let width, height;
+            let particles = [];
+            let animationId = null;
+            
+            // Configurações: quadrados GRANDES
+            const SQUARE_SIZE_MIN = 42;
+            const SQUARE_SIZE_MAX = 72;
+            
+            // Velocidade de subida (um pouco mais rápida)
+            const RISE_SPEED_MIN = 1.1;
+            const RISE_SPEED_MAX = 2.2;
+            
+            // Quantidade de quadrados
+            const PARTICLE_COUNT = 14;
+            
+            // Intervalo para gerar novos quadrados
+            const GENERATION_INTERVAL_FRAMES = 65;
+            
+            let frameCounter = 0;
+            
+            // Função para interpolar cor: do branco (RGB 255,255,255) até cinza escuro (RGB 60,60,60)
+            // Quanto mais alto (menor Y), mais escuro
+            function getColorByProgress(progress) {
+                // progress = 0 (base, totalmente embaixo) -> branco
+                // progress = 1 (topo, antes de sumir) -> cinza escuro
+                // Valores RGB: branco (255,255,255) até cinza escuro (50,50,50)
+                const startR = 255, startG = 255, startB = 255;
+                const endR = 55, endG = 55, endB = 55;
+                
+                const r = Math.floor(startR + (endR - startR) * progress);
+                const g = Math.floor(startG + (endG - startG) * progress);
+                const b = Math.floor(startB + (endB - startB) * progress);
+                
+                return `rgb(${r}, ${g}, ${b})`;
+            }
+            
+            // Classe do quadrado que SOBE, mudando de BRANCO para CINZA
+            class RisingSquare {
+                constructor(x, y, size, speedX, speedY, opacity, rotationAngle = 0) {
+                    this.x = x;
+                    this.y = y;
+                    this.size = size;
+                    this.speedX = speedX;
+                    this.speedY = speedY;      // negativo = sobe
+                    this.opacity = opacity;     // opacidade base
+                    this.rotation = rotationAngle;
+                    this.currentOpacity = opacity;
+                }
+                
+                update() {
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    
+                    // Calcular progresso da subida (0 = embaixo, 1 = topo)
+                    // A altura de referência: da base da tela (height + size) até o topo (-size)
+                    let startY = height + this.size * 0.5;
+                    let endY = -this.size * 0.5;
+                    let progress = (startY - this.y) / (startY - endY);
+                    progress = Math.min(0.98, Math.max(0, progress));
+                    
+                    // A cor muda gradualmente de branco para cinza conforme sobe
+                    this.currentColor = getColorByProgress(progress);
+                    
+                    // Fade de opacidade: desaparece suavemente no topo
+                    let fadeFactor = 1;
+                    if (this.y < height * 0.3) {
+                        let fadeProgress = Math.min(1, Math.max(0, (height * 0.3 - this.y) / (height * 0.3 + this.size)));
+                        fadeFactor = 1 - fadeProgress * 0.95;
+                    }
+                    this.currentOpacity = this.opacity * Math.max(0.05, fadeFactor);
+                    
+                    // Reset quando sair completamente do topo ou laterais
+                    if (this.y + this.size < -120 || this.x + this.size < -140 || this.x - this.size > width + 140) {
+                        this.resetToBottom();
+                    }
+                    if (this.y > height + this.size + 180) {
+                        this.resetToBottom();
+                    }
+                }
+                
+                resetToBottom() {
+                    // Surge na parte inferior da tela (branco puro)
+                    this.x = Math.random() * (width + this.size * 1.6) - this.size * 0.8;
+                    this.y = height + Math.random() * 80 + this.size;
+                    this.size = Math.random() * (SQUARE_SIZE_MAX - SQUARE_SIZE_MIN) + SQUARE_SIZE_MIN;
+                    this.speedY = -(Math.random() * (RISE_SPEED_MAX - RISE_SPEED_MIN) + RISE_SPEED_MIN);
+                    this.speedX = (Math.random() - 0.5) * 0.35;
+                    this.opacity = Math.random() * 0.7 + 0.3;
+                    this.currentOpacity = this.opacity;
+                    this.rotation = (Math.random() - 0.5) * 0.25;
+                    this.currentColor = "#FFFFFF"; // começa branco
+                }
+                
+                draw(ctx) {
+                    ctx.save();
+                    ctx.globalAlpha = this.currentOpacity;
+                    ctx.translate(this.x + this.size/2, this.y + this.size/2);
+                    ctx.rotate(this.rotation);
+                    ctx.fillStyle = this.currentColor;
+                    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                    ctx.restore();
+                }
+            }
+            
+            // Inicializa as partículas
+            function initParticles() {
+                particles = [];
+                for (let i = 0; i < PARTICLE_COUNT; i++) {
+                    let size = Math.random() * (SQUARE_SIZE_MAX - SQUARE_SIZE_MIN) + SQUARE_SIZE_MIN;
+                    let speedY = -(Math.random() * (RISE_SPEED_MAX - RISE_SPEED_MIN) + RISE_SPEED_MIN);
+                    let speedX = (Math.random() - 0.5) * 0.35;
+                    let x = Math.random() * (width + size) - size;
+                    let y = height - Math.random() * height * 0.4 + size;
+                    let opacity = Math.random() * 0.7 + 0.3;
+                    let rot = (Math.random() - 0.5) * 0.25;
+                    let particle = new RisingSquare(x, y, size, speedX, speedY, opacity, rot);
+                    // Define cor inicial baseada na posição atual
+                    let startY = height + particle.size * 0.5;
+                    let endY = -particle.size * 0.5;
+                    let progress = (startY - particle.y) / (startY - endY);
+                    progress = Math.min(0.98, Math.max(0, progress));
+                    particle.currentColor = getColorByProgress(progress);
+                    particles.push(particle);
+                }
+            }
+            
+            // Atualiza partículas e gera novas
+            function updateParticles() {
+                for (let p of particles) {
+                    p.update();
+                }
+                
+                // Geração complementar para manter fluxo
+                if (frameCounter % GENERATION_INTERVAL_FRAMES === 0) {
+                    if (particles.length < PARTICLE_COUNT + 2) {
+                        let size = Math.random() * (SQUARE_SIZE_MAX - SQUARE_SIZE_MIN) + SQUARE_SIZE_MIN;
+                        let speedY = -(Math.random() * (RISE_SPEED_MAX - RISE_SPEED_MIN) + RISE_SPEED_MIN);
+                        let speedX = (Math.random() - 0.5) * 0.35;
+                        let x = Math.random() * (width + size) - size;
+                        let y = height + Math.random() * 60 + size;
+                        let opacity = Math.random() * 0.7 + 0.3;
+                        let rot = (Math.random() - 0.5) * 0.25;
+                        let newParticle = new RisingSquare(x, y, size, speedX, speedY, opacity, rot);
+                        newParticle.currentColor = "#FFFFFF";
+                        particles.push(newParticle);
+                    }
+                    if (particles.length > PARTICLE_COUNT + 4) {
+                        particles = particles.slice(-PARTICLE_COUNT - 2);
+                    }
+                }
+                frameCounter++;
+            }
+            
+            // Desenha fundo preto e quadrados
+            function drawBackground() {
+                ctx.clearRect(0, 0, width, height);
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(0, 0, width, height);
+                
+                for (let p of particles) {
+                    p.draw(ctx);
+                }
+            }
+            
+            // Redimensionamento do canvas
+            function resizeCanvas() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+                
+                if (particles.length > 0) {
+                    for (let p of particles) {
+                        if (p.x > width + p.size) p.x = Math.random() * width * 0.9;
+                        if (p.y > height + p.size) p.y = height - Math.random() * height * 0.4;
+                        if (p.x + p.size < -50) p.x = Math.random() * width;
+                        if (p.y + p.size < -100) p.y = height - Math.random() * 60;
+                        p.x = Math.min(Math.max(p.x, -p.size), width + p.size);
+                        if (p.speedY > 0) p.speedY = -p.speedY;
+                        // Recalcular cor baseada na nova posição
+                        let startY = height + p.size * 0.5;
+                        let endY = -p.size * 0.5;
+                        let progress = (startY - p.y) / (startY - endY);
+                        progress = Math.min(0.98, Math.max(0, progress));
+                        p.currentColor = getColorByProgress(progress);
+                    }
+                } else {
+                    initParticles();
+                }
+            }
+            
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+            });
+            
+            function animate() {
+                if (!ctx) return;
+                updateParticles();
+                drawBackground();
+                animationId = requestAnimationFrame(animate);
+            }
+            
+            function setup() {
+                resizeCanvas();
+                initParticles();
+                animate();
+            }
+            
+            setup();
+        })();
+    </script>
+</body>
+</html>
